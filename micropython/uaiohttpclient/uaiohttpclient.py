@@ -40,7 +40,7 @@ class ChunkedClientResponse(ClientResponse):
         return "<ChunkedClientResponse %d %s>" % (self.status, self.headers)
 
 
-async def request_raw(method, url):
+async def request_raw(method, url, timeout_ms=None):
     try:
         proto, dummy, host, path = url.split("/", 3)
     except ValueError:
@@ -55,7 +55,8 @@ async def request_raw(method, url):
 
     if proto != "http:":
         raise ValueError("Unsupported protocol: " + proto)
-    reader, writer = await asyncio.open_connection(host, port)
+    rw = asyncio.open_connection(host, port)
+    reader, writer = await (rw if timeout_ms is None else asyncio.wait_for_ms(rw, timeout_ms)) 
     # Use protocol 1.0, because 1.1 always allows to use chunked
     # transfer-encoding But explicitly set Connection: close, even
     # though this should be default for 1.0, because some servers
@@ -69,10 +70,10 @@ async def request_raw(method, url):
     return reader
 
 
-async def request(method, url):
+async def request(method, url, timeout_ms=None):
     redir_cnt = 0
     while redir_cnt < 2:
-        reader = await request_raw(method, url)
+        reader = await request_raw(method, url, timeout_ms)
         headers = []
         sline = await reader.readline()
         sline = sline.split(None, 2)
